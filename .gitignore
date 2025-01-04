@@ -1,5 +1,6 @@
+.env
 .DS_Store
 .venv/
 static/
 flow-lunch-menu.json
-.env
+__pycache__/
