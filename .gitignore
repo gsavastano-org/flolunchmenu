@@ -2,3 +2,4 @@
 .venv/
 static/
 flow-lunch-menu.json
+.env
