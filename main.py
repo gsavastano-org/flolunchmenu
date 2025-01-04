@@ -27,9 +27,19 @@ MENU_DATA = {}
 DAY_IMAGE_PATHS = {}
 days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
 for i, day in enumerate(days):
-    with open(f'static/menu/{week_number}/0{i+1}.json', 'r') as f:
-        MENU_DATA[day] = json.load(f)
+    if os.path.exists(f'static/menu/{week_number}/0{i+1}.json'):
+        with open(f'static/menu/{week_number}/0{i+1}.json', 'r') as f:
+            MENU_DATA[day] = json.load(f)
+    else:
+        logging.warning(f"Menu file not found for {day} (week {week_number}). Skipping day.")
+        MENU_DATA[day] = []  # Handle case where menu file is missing
+
+    if os.path.exists(f'static/pictures/{week_number}/0{i+1}.jpeg'):
         DAY_IMAGE_PATHS[day] = f'static/pictures/{week_number}/0{i+1}.jpeg'
+    else:
+        logging.warning(f"Image file not found for {day} (week {week_number}). Skipping day.")
+        DAY_IMAGE_PATHS[day] = None # Handle case where image file is missing
+    
 
 # --- Set the form file name and title ---
 form_file_name = f'Weekly_Meals_Order_Week_{week_number}'
@@ -54,6 +64,8 @@ if form_id:
     form_id = form.get('formId')
     logging.info(f"Retrieved form with formId: {form_id}")
     print(f"Form already exists: {drive_helper.get_form_webViewLink(form_id)}")
+    logging.info("Script finished - Form already exists")
+    exit() # Stop the script if the form already exists
 else:
     # --- Create the form using Forms helper ---
     logging.info(f"Creating form with title: {form_title}")
@@ -91,6 +103,10 @@ else:
 
 # --- Upload images and create form questions ---
 for day, menu in reversed(MENU_DATA.items()):
+    if not menu or not DAY_IMAGE_PATHS[day]:
+        logging.warning(f"Skipping {day} due to missing menu or image data.")
+        continue  # Skip to the next day if menu or image is missing
+    
     # Check if image exists and upload if needed using Drive helper
     image_file_name = f'{day}_image.jpg'
     image_id = drive_helper.get_file_id(image_file_name, week_folder_id)
