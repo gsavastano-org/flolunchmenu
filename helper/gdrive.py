@@ -1,3 +1,4 @@
+# helper/gdrive.py
 from googleapiclient.discovery import build
 from google.oauth2 import service_account
 from googleapiclient.http import MediaFileUpload
@@ -88,8 +89,30 @@ class GoogleDriveHelper:
         file_id = file.get('id')
         logging.info(f"Image uploaded with id: {file_id}")
         return file_id
-    
+
     def get_form_webViewLink(self, form_id):
         """Retrieves the webViewLink of a form by its ID."""
         file = self.drive_service.files().get(fileId=form_id, fields="webViewLink").execute()
         return file.get('webViewLink')
+
+    def move_file(self, file_id, new_parent_id, current_parent_id, new_name=None):
+        """Moves a file from one folder to another."""
+        logging.info(f"Moving file with id: {file_id} to folder: {new_parent_id}")
+        try:
+            # No need to get existing parents, just use addParents and removeParents
+            body = {}
+            if new_name:
+                body['name'] = new_name
+
+            updated_file = self.drive_service.files().update(
+                fileId=file_id,
+                addParents=new_parent_id,
+                removeParents=current_parent_id,
+                body=body,
+                fields='id, parents'
+            ).execute()
+            logging.info(f"File moved successfully. New file id: {updated_file.get('id')}")
+            return updated_file.get('id')
+        except Exception as e:
+            logging.error(f"Error moving file: {e}")
+            return None
