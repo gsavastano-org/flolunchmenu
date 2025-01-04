@@ -1,0 +1,4 @@
+.DS_Store
+.venv/
+static/
+flow-lunch-menu.json
