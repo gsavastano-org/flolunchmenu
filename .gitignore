@@ -2,5 +2,7 @@
 .DS_Store
 .venv/
 static/
-flow-lunch-menu.json
+service-account-flow-lunch-menu.json
+oauth2-flow-lunch-menu.json
 __pycache__/
+token.json

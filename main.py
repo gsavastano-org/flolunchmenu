@@ -1,31 +1,25 @@
-from datetime import datetime
-from dotenv import load_dotenv
-import os
+import asyncio
 import json
-import logging
-import asyncio  # Import the asyncio library
-from helper.gdrive import GoogleDriveHelper
-from helper.gforms import GoogleFormsHelper
-from helper.gemini import GoogleGeminiHelper
+from datetime import datetime
+from app.core.utils import configure_logging, handle_error, logging
+from app.core.config import Config
+from app.core.auth import GoogleAuth
+from app.services.gdrive import GoogleDriveHelper
+from app.services.gforms import GoogleFormsHelper
+from app.services.gemini import GoogleGeminiHelper
 
-load_dotenv()
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logging.info("Starting the script")
+configure_logging()
 
-YOUR_EMAIL = os.getenv('YOUR_EMAIL')
-SERVICE_ACCOUNT_FILE = os.getenv('SERVICE_ACCOUNT_FILE')
-SCOPES = json.loads(os.getenv('SCOPES'))
-GOOGLE_DRIVE_FOLDER_ID = os.getenv('GOOGLE_DRIVE_FOLDER_ID')
-INPUT_FOLDER_NAME = "new_menus"  # Define the input folder name
+async def main():
+    config = Config()
+    auth = GoogleAuth(config)
+    credentials = auth.get_credentials()
 
-# Initialize the GoogleDriveHelper, GoogleFormsHelper, and GoogleGeminiHelper
-drive_helper = GoogleDriveHelper(credentials_path=SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-forms_helper = GoogleFormsHelper(credentials_path=SERVICE_ACCOUNT_FILE, scopes=SCOPES)
-gemini_helper = GoogleGeminiHelper(drive_service=drive_helper.drive_service) # Pass drive_service
+    drive_helper = GoogleDriveHelper(credentials)
+    forms_helper = GoogleFormsHelper(credentials)
+    gemini_helper = GoogleGeminiHelper(config.GEMINI_API_KEY, drive_helper.drive_service)
 
-async def main(): # Define an async main function
     week_number = datetime.now().isocalendar()[1]
 
     MENU_DATA = {}
@@ -41,10 +35,10 @@ async def main(): # Define an async main function
 
     # --- Use the helper to check for or create the week folder ---
     week_folder_name = str(week_number)
-    week_folder_id = drive_helper.get_folder_id(week_folder_name, GOOGLE_DRIVE_FOLDER_ID)
+    week_folder_id = drive_helper.get_folder_id(week_folder_name, config.GOOGLE_DRIVE_FOLDER_ID)
     if not week_folder_id:
         logging.info(f"Creating week folder: {week_folder_name}")
-        week_folder_id = drive_helper.create_folder(week_folder_name, GOOGLE_DRIVE_FOLDER_ID)
+        week_folder_id = drive_helper.create_folder(week_folder_name, config.GOOGLE_DRIVE_FOLDER_ID)
         logging.info(f"Week folder created with id: {week_folder_id}")
 
     # --- Check if form already exists using Drive helper ---
@@ -91,9 +85,9 @@ async def main(): # Define an async main function
 
         else:
             # Check the input folder for images
-            input_folder_id = drive_helper.get_folder_id(INPUT_FOLDER_NAME, GOOGLE_DRIVE_FOLDER_ID)
+            input_folder_id = drive_helper.get_folder_id(config.INPUT_FOLDER_NAME, config.GOOGLE_DRIVE_FOLDER_ID)
             if input_folder_id:
-                logging.info(f"Checking input folder for images: {INPUT_FOLDER_NAME}")
+                logging.info(f"Checking input folder for images: {config.INPUT_FOLDER_NAME}")
                 images_found_in_input = True
                 for i in range(1, 6):
                     image_file_name = f'{i}.jpeg'
@@ -131,12 +125,17 @@ async def main(): # Define an async main function
                     logging.warning("Not all images found in the input folder. Exiting.")
                     return
             else:
-                logging.warning(f"Input folder '{INPUT_FOLDER_NAME}' not found. Exiting.")
+                logging.warning(f"Input folder '{config.INPUT_FOLDER_NAME}' not found. Exiting.")
                 return
 
         # --- Create the form using Forms helper ---
         logging.info(f"Creating form with title: {form_title}")
         form = forms_helper.create_form(form_title)
+
+        if form is None:
+            logging.error("Failed to create form. Exiting.")
+            return
+        
         form_id = form['formId']
         logging.info(f"Form created with formId: {form_id}")
         print(f"Form created: {form.get('responderUri')}")
@@ -154,8 +153,8 @@ async def main(): # Define an async main function
         batch = drive_helper.drive_service.new_batch_http_request()
         permissions = [
             {'type': 'anyone', 'role': 'reader'},
-            {'type': 'user', 'role': 'owner', 'emailAddress': YOUR_EMAIL, 'transferOwnership': True},
-            {'type': 'user', 'role': 'writer', 'emailAddress': YOUR_EMAIL},
+            {'type': 'user', 'role': 'owner', 'emailAddress': config.YOUR_EMAIL, 'transferOwnership': True},
+            {'type': 'user', 'role': 'writer', 'emailAddress': config.YOUR_EMAIL},
         ]
         for permission in permissions:
             batch.add(
@@ -244,4 +243,4 @@ async def main(): # Define an async main function
     logging.info("Script finished")
 
 if __name__ == "__main__":
-    asyncio.run(main()) # Run the async main function
+    asyncio.run(main())

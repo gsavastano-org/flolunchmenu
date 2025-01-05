@@ -1,30 +1,22 @@
-# helper/gemini.py
-import os
 import google.generativeai as genai
-from dotenv import load_dotenv
-import json
 import logging
-from typing import Optional
-from googleapiclient.discovery import build
+from app.core.utils import handle_error, configure_logging, logging
 
-load_dotenv()
-
-# Configure logging (consider moving this to a central logging config)
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+configure_logging()
 
 class GoogleGeminiHelper:
-    def __init__(self, api_key_env_var="GEMINI_API_KEY", drive_service=None):
-        self.api_key_env_var = api_key_env_var
+    def __init__(self, api_key, drive_service):
+        self.api_key = api_key
         self.model = self._configure_model()
         self.drive_service = drive_service
 
     def _configure_model(self):
         """Configures and returns the Gemini model."""
         try:
-            genai.configure(api_key=os.environ[self.api_key_env_var])
+            genai.configure(api_key=self.api_key)
         except KeyError:
-            logging.error(
-                f"Error: {self.api_key_env_var} environment variable not set. "
+            handle_error(
+                f"Error: GEMINI_API_KEY environment variable not set. "
                 f"Please set it in your .env file."
             )
             return None
@@ -44,50 +36,46 @@ class GoogleGeminiHelper:
         )
         return model
 
-    def _load_image_from_drive(self, file_id: str) -> Optional[bytes]:
+    def _load_image_from_drive(self, file_id):
         """Loads image data from Google Drive using its file ID."""
         if not self.drive_service:
-            logging.error("Drive service not initialized.")
+            handle_error("Drive service not initialized.")
             return None
         try:
             request = self.drive_service.files().get_media(fileId=file_id)
             response = request.execute()
             return response
         except Exception as e:
-            logging.error(f"Error loading image from Google Drive: {e}")
+            handle_error(f"Error loading image from Google Drive: {e}")
             return None
 
-    def get_menu_json_from_drive_id(self, file_id: str) -> Optional[str]:
+    def get_menu_json_from_drive_id(self, file_id):
         """Generates a menu JSON string for the given Google Drive file ID."""
         if self.model is None:
-            logging.error("Gemini model not configured.")
+            handle_error("Gemini model not configured.")
             return None
 
         image_data = self._load_image_from_drive(file_id)
         if image_data:
             image_part = {"mime_type": "image/jpeg", "data": image_data}
 
-            # Add a text prompt
             text_prompt = "Analyze the menu in the image and extract the dishes and their allergens in JSON format."
 
             try:
-                # Pass both the text prompt and the image part to generate_content
                 response = self.model.generate_content([text_prompt, image_part])
 
-                # Check for prompt feedback or candidates
                 if response.prompt_feedback:
                     logging.warning(f"Prompt feedback: {response.prompt_feedback}")
 
                 if not response.candidates:
-                    logging.error("No candidates returned in the response.")
+                    handle_error("No candidates returned in the response.")
                     return None
 
-                # Extract and return the text from the first candidate
                 return response.candidates[0].content.parts[0].text
 
             except Exception as e:
-                logging.error(f"An error occurred during the message sending: {e}")
+                handle_error(f"An error occurred during the message sending: {e}")
                 return None
         else:
-            logging.error("Could not load the image from Google Drive.")
+            handle_error("Could not load the image from Google Drive.")
             return None
