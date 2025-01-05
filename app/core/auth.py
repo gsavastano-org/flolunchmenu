@@ -13,15 +13,15 @@ class GoogleAuth:
         creds = None
         token_path = 'token.json'  # File to store user tokens
         if os.path.exists(token_path):
-            creds = Credentials.from_authorized_user_file(token_path, self.config.SCOPES)
+            creds = Credentials.from_authorized_user_file(token_path, self.config.GOOGLE_PROJECT_SCOPES)
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self.config.SERVICE_ACCOUNT_FILE,  # Your downloaded OAuth credentials
-                    self.config.SCOPES
+                    self.config.GOOGLE_OAUTH2_FILE,  # Your downloaded OAuth credentials
+                    self.config.GOOGLE_PROJECT_SCOPES
                 )
                 creds = flow.run_local_server(port=0)
 
@@ -34,5 +34,5 @@ class GoogleAuth:
     def get_credentials(self):
         """Returns the user's credentials."""
         if not self.credentials:
-            self.authenticate()
+            self.credentials = self.authenticate()
         return self.credentials

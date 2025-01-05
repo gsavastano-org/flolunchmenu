@@ -49,3 +49,23 @@ class GoogleFormsHelper:
         except Exception as e:
             handle_error(f"Error updating form with ID {form_id}", e)
             return None
+
+    def set_response_destination(self, form_id, spreadsheet_id):
+        """Sets the response destination of the form to a specific sheet in a spreadsheet."""
+        logging.info(
+            f"Setting response destination for form {form_id} to spreadsheet {spreadsheet_id}"
+        )
+        try:
+            request = {
+                "destination": {
+                    "spreadsheetId": spreadsheet_id
+                }
+            }
+            # Use forms.responses.watch instead of forms.batchUpdate
+            self.service.forms().responses().watch(formId=form_id, body=request).execute()
+            logging.info(f"Response destination set for form {form_id}")
+        except Exception as e:
+            handle_error(
+                f"Error setting response destination for form {form_id}", e
+            )
+            return None

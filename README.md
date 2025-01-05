@@ -29,11 +29,6 @@ This application simplifies the process of creating weekly meal order forms for 
 *   Python 3.12+
 *   `pip` package manager
 
-## Installation
-
-Detailed installation instructions for IT managers and technical teams can be found in the [SETUP.md](SETUP.md) file.
-
-
 ## Disclaimer
 
 This application is provided as-is and may require modifications to suit specific needs. Please be aware of Google API usage limits and quotas.
