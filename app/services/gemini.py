@@ -1,12 +1,12 @@
 import google.generativeai as genai
-import logging
 from app.core.utils import handle_error, configure_logging, logging
 
 configure_logging()
 
 class GoogleGeminiHelper:
-    def __init__(self, api_key, drive_service):
+    def __init__(self, api_key, model_name, drive_service):
         self.api_key = api_key
+        self.model_name = model_name
         self.model = self._configure_model()
         self.drive_service = drive_service
 
@@ -30,7 +30,7 @@ class GoogleGeminiHelper:
         }
 
         model = genai.GenerativeModel(
-            model_name="gemini-2.0-flash-exp",
+            model_name=self.model_name,
             generation_config=generation_config,
             system_instruction="## Purpose and Goals\n\n* The input menu image contains multiple dishes, their name, their allergens and picture\n\n## Behaviors and Rules\n\n1. **Image Processing:**\n    - Analyze the input image to identify individual menu dishes.\n    - Extrapolate names and allergens, ignore prices\n\n2. **JSON Creation:**\n    - Order the items the same way they appear on the image, from left to right, from top line to bottom.\n\nHere is an example of the format that you should return the data in:\n\n```json\n[\n  {\n     \"name\": \"Spaghetti Bolognese\",\n     \"allergens\": \"(3,9)\",\n  },\n  {\n     \"name\": \"Soup of the day\",\n     \"allergens\": \"(1,3,9)\",\n  }\n]\n```",
         )

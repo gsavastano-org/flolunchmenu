@@ -1,13 +1,13 @@
 import asyncio
 import json
 from datetime import datetime
-from app.core.utils import configure_logging, handle_error, logging
+from app.core.utils import configure_logging, logging
 from app.core.config import Config
 from app.core.auth import GoogleAuth
 from app.services.gdrive import GoogleDriveHelper
 from app.services.gforms import GoogleFormsHelper
 from app.services.gemini import GoogleGeminiHelper
-
+from app.services.gsheets import GoogleSheetsHelper
 
 configure_logging()
 
@@ -18,7 +18,8 @@ async def main():
 
     drive_helper = GoogleDriveHelper(credentials)
     forms_helper = GoogleFormsHelper(credentials)
-    gemini_helper = GoogleGeminiHelper(config.GEMINI_API_KEY, drive_helper.drive_service)
+    sheets_helper = GoogleSheetsHelper(credentials)
+    gemini_helper = GoogleGeminiHelper(config.GEMINI_API_KEY, config.GEMINI_MODEL_NAME, drive_helper.drive_service)
 
     week_number = datetime.now().isocalendar()[1]
 
@@ -35,14 +36,22 @@ async def main():
 
     # --- Use the helper to check for or create the week folder ---
     week_folder_name = str(week_number)
-    week_folder_id = drive_helper.get_folder_id(week_folder_name, config.GOOGLE_DRIVE_FOLDER_ID)
+    week_folder_id = drive_helper.get_folder_id(week_folder_name, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
     if not week_folder_id:
         logging.info(f"Creating week folder: {week_folder_name}")
-        week_folder_id = drive_helper.create_folder(week_folder_name, config.GOOGLE_DRIVE_FOLDER_ID)
+        week_folder_id = drive_helper.create_folder(week_folder_name, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
         logging.info(f"Week folder created with id: {week_folder_id}")
 
     # --- Check if form already exists using Drive helper ---
     form_id = drive_helper.get_file_id(form_file_name, week_folder_id)
+
+    # --- Check if spreadsheet already exists using Drive helper ---
+    spreadsheet_id = drive_helper.get_file_id(config.GOOGLE_SPREADSHEET_NAME, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
+    if not spreadsheet_id:
+        logging.info(f"Spreadsheet does not exist, creating spreadsheet with name: {config.GOOGLE_SPREADSHEET_NAME}")
+        spreadsheet_id = sheets_helper.create_spreadsheet(config.GOOGLE_SPREADSHEET_NAME)
+        drive_helper.move_file(spreadsheet_id, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID, drive_helper.get_root_folder_id())
+        logging.info(f"Spreadsheet created with id: {spreadsheet_id}")
 
     if form_id:
         # Form already exists, retrieve form using Forms helper
@@ -53,7 +62,7 @@ async def main():
         logging.info(f"Retrieved form with formId: {form_id}")
         print(f"Form already exists: {drive_helper.get_form_webViewLink(form_id)}")
         logging.info("Script finished - Form already exists")
-        return # Stop the script if the form already exists
+        return  # Stop the script if the form already exists
     else:
         logging.info("Form does not exist, proceeding with creation.")
 
@@ -69,7 +78,7 @@ async def main():
         if images_exist_in_week_folder:
             logging.info("Images found in the week's folder. Processing with Gemini.")
             for i, day in enumerate(days):
-                image_file_name = f'{i+1}.jpeg'
+                image_file_name = f'{i + 1}.jpeg'
                 image_id = drive_helper.get_file_id(image_file_name, week_folder_id)
                 if image_id:
                     # Pass the file ID to Gemini helper
@@ -77,7 +86,7 @@ async def main():
                     if menu_data_str:
                         try:
                             MENU_DATA[day] = json.loads(menu_data_str)
-                            DAY_IMAGE_PATHS[day] = image_file_name # Use filename as it's already in the target
+                            DAY_IMAGE_PATHS[day] = image_file_name  # Use filename as it's already in the target
                         except json.JSONDecodeError as e:
                             logging.error(f"Error decoding JSON for {day}: {e}")
                 else:
@@ -85,9 +94,9 @@ async def main():
 
         else:
             # Check the input folder for images
-            input_folder_id = drive_helper.get_folder_id(config.INPUT_FOLDER_NAME, config.GOOGLE_DRIVE_FOLDER_ID)
+            input_folder_id = drive_helper.get_folder_id(config.GOOGLE_DRIVE_INPUT_FOLDER_NAME, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
             if input_folder_id:
-                logging.info(f"Checking input folder for images: {config.INPUT_FOLDER_NAME}")
+                logging.info(f"Checking input folder for images: {config.GOOGLE_DRIVE_INPUT_FOLDER_NAME}")
                 images_found_in_input = True
                 for i in range(1, 6):
                     image_file_name = f'{i}.jpeg'
@@ -100,32 +109,34 @@ async def main():
                 if images_found_in_input:
                     logging.info("All images found in the input folder. Moving to week folder and processing.")
                     for i, day in enumerate(days):
-                        source_file_name = f'{i+1}.jpeg'
-                        dest_file_name = f'{i+1}.jpeg'
-                        source_file_id = drive_helper.get_file_id(source_file_name, input_folder_id)
+                        file_name = f'{i + 1}.jpeg'
+                        source_file_id = drive_helper.get_file_id(file_name, input_folder_id)
                         if source_file_id:
                             # Move the file
-                            moved_file_id = drive_helper.move_file(source_file_id, week_folder_id, input_folder_id, new_name=dest_file_name)
+                            moved_file_id = drive_helper.move_file(source_file_id, week_folder_id, input_folder_id,
+                                                                   new_name=file_name)
                             if moved_file_id:
-                                logging.info(f"Moved {source_file_name} to week folder as {dest_file_name}")
+                                logging.info(f"Moved {file_name} to week folder as {file_name}")
+                                # Add a delay after moving the file
+                                await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
                                 # Process the moved image
                                 menu_data_str = gemini_helper.get_menu_json_from_drive_id(moved_file_id)
                                 if menu_data_str:
                                     try:
                                         MENU_DATA[day] = json.loads(menu_data_str)
-                                        DAY_IMAGE_PATHS[day] = dest_file_name
+                                        DAY_IMAGE_PATHS[day] = file_name
                                     except json.JSONDecodeError as e:
                                         logging.error(f"Error decoding JSON for {day}: {e}")
                             else:
-                                logging.error(f"Failed to move {source_file_name} to the week folder.")
+                                logging.error(f"Failed to move {file_name} to the week folder.")
                         else:
-                            logging.error(f"Could not find {source_file_name} in the input folder.")
+                            logging.error(f"Could not find {file_name} in the input folder.")
 
                 else:
                     logging.warning("Not all images found in the input folder. Exiting.")
                     return
             else:
-                logging.warning(f"Input folder '{config.INPUT_FOLDER_NAME}' not found. Exiting.")
+                logging.warning(f"Input folder '{config.GOOGLE_DRIVE_INPUT_FOLDER_NAME}' not found. Exiting.")
                 return
 
         # --- Create the form using Forms helper ---
@@ -135,19 +146,16 @@ async def main():
         if form is None:
             logging.error("Failed to create form. Exiting.")
             return
-        
+
         form_id = form['formId']
         logging.info(f"Form created with formId: {form_id}")
         print(f"Form created: {form.get('responderUri')}")
 
+        # --- Set the form response destination ---
+        forms_helper.set_response_destination(form_id, spreadsheet_id)
+
         # --- Move the created form to the week folder using Drive helper---
-        drive_helper.drive_service.files().update(
-            fileId=form_id,
-            addParents=week_folder_id,
-            removeParents=drive_helper.drive_service.files().get(fileId=form_id, fields='parents').execute().get('parents')[0], # Get the current parents of the file and remove them
-            body={'name': form_file_name},
-            fields='id, parents',
-        ).execute()
+        drive_helper.move_file(form_id, week_folder_id, drive_helper.get_root_folder_id(), form_file_name)
 
         # --- Share and set permissions for the form using Drive helper---
         batch = drive_helper.drive_service.new_batch_http_request()
@@ -167,7 +175,15 @@ async def main():
             )
         batch.execute()
 
-    # --- Upload images and create form questions ---
+        # Transfer ownership
+        drive_helper.drive_service.permissions().create(
+            fileId=form_id,
+            body={'type': 'user', 'role': 'owner', 'emailAddress': config.YOUR_EMAIL},
+            fields='id',
+            transferOwnership=True
+        ).execute()
+
+        # --- Attache images and create form questions for each day---
         for day, menu in reversed(MENU_DATA.items()):
             if not menu or not DAY_IMAGE_PATHS[day]:
                 logging.warning(f"Skipping {day} due to missing menu or image data.")
