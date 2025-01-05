@@ -26,24 +26,13 @@ This application simplifies the process of creating weekly meal order forms for 
 *   Google Cloud Project with enabled APIs (Google Drive, Google Forms, Gemini)
 *   OAuth 2.0 Client ID credentials
 *   Gemini API Key
-*   Python 3.7+
+*   Python 3.12+
 *   `pip` package manager
 
 ## Installation
 
 Detailed installation instructions for IT managers and technical teams can be found in the [SETUP.md](SETUP.md) file.
 
-## Usage
-
-A comprehensive user manual for end-users is available in the [USER-MANUAL.md](USER-MANUAL.md) file.
-
-## Contributing
-
-Contributions to this project are welcome! Please feel free to submit pull requests or open issues to suggest improvements or report bugs.
-
-## License
-
-This project is licensed under the [MIT License](LICENSE) (You'll need to create a LICENSE file).
 
 ## Disclaimer
 
