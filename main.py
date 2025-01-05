@@ -7,7 +7,7 @@ from app.core.auth import GoogleAuth
 from app.services.gdrive import GoogleDriveHelper
 from app.services.gforms import GoogleFormsHelper
 from app.services.gemini import GoogleGeminiHelper
-from app.services.gsheets import GoogleSheetsHelper
+#from app.services.gsheets import GoogleSheetsHelper
 
 configure_logging()
 
@@ -18,7 +18,7 @@ async def main():
 
     drive_helper = GoogleDriveHelper(credentials)
     forms_helper = GoogleFormsHelper(credentials)
-    sheets_helper = GoogleSheetsHelper(credentials)
+ #   sheets_helper = GoogleSheetsHelper(credentials)
     gemini_helper = GoogleGeminiHelper(config.GEMINI_API_KEY, config.GEMINI_MODEL_NAME, drive_helper.drive_service)
 
     week_number = datetime.now().isocalendar()[1]
@@ -46,12 +46,12 @@ async def main():
     form_id = drive_helper.get_file_id(form_file_name, week_folder_id)
 
     # --- Check if spreadsheet already exists using Drive helper ---
-    spreadsheet_id = drive_helper.get_file_id(config.GOOGLE_SPREADSHEET_NAME, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
-    if not spreadsheet_id:
-        logging.info(f"Spreadsheet does not exist, creating spreadsheet with name: {config.GOOGLE_SPREADSHEET_NAME}")
-        spreadsheet_id = sheets_helper.create_spreadsheet(config.GOOGLE_SPREADSHEET_NAME)
-        drive_helper.move_file(spreadsheet_id, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID, drive_helper.get_root_folder_id())
-        logging.info(f"Spreadsheet created with id: {spreadsheet_id}")
+    #spreadsheet_id = drive_helper.get_file_id(config.GOOGLE_SPREADSHEET_NAME, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
+    #if not spreadsheet_id:
+    #    logging.info(f"Spreadsheet does not exist, creating spreadsheet with name: {config.GOOGLE_SPREADSHEET_NAME}")
+    #    spreadsheet_id = sheets_helper.create_spreadsheet(config.GOOGLE_SPREADSHEET_NAME)
+    #    drive_helper.move_file(spreadsheet_id, config.GOOGLE_DRIVE_PROJECT_FOLDER_ID, drive_helper.get_root_folder_id())
+    #    logging.info(f"Spreadsheet created with id: {spreadsheet_id}")
 
     if form_id:
         # Form already exists, retrieve form using Forms helper
@@ -152,7 +152,7 @@ async def main():
         print(f"Form created: {form.get('responderUri')}")
 
         # --- Set the form response destination ---
-        forms_helper.set_response_destination(form_id, spreadsheet_id)
+        # forms_helper.set_response_destination(form_id, spreadsheet_id)
 
         # --- Move the created form to the week folder using Drive helper---
         drive_helper.move_file(form_id, week_folder_id, drive_helper.get_root_folder_id(), form_file_name)
