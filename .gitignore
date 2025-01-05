@@ -1,6 +1,7 @@
 .env
 .DS_Store
 .venv/
+venv/
 static/
 service-account-flow-lunch-menu.json
 oauth2-flow-lunch-menu.json
