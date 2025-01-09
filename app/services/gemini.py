@@ -32,7 +32,37 @@ class GoogleGeminiHelper:
         model = genai.GenerativeModel(
             model_name=self.model_name,
             generation_config=generation_config,
-            system_instruction="## Purpose and Goals\n\n* The input menu image contains multiple dishes, their name, their allergens and picture\n\n## Behaviors and Rules\n\n1. **Image Processing:**\n    - Analyze the input image to identify individual menu dishes.\n    - Extrapolate names and allergens, ignore prices\n\n2. **JSON Creation:**\n    - Order the items the same way they appear on the image, from left to right, from top line to bottom.\n\nHere is an example of the format that you should return the data in:\n\n```json\n[\n  {\n     \"name\": \"Spaghetti Bolognese\",\n     \"allergens\": \"(3,9)\",\n  },\n  {\n     \"name\": \"Soup of the day\",\n     \"allergens\": \"(1,3,9)\",\n  }\n]\n```",
+            system_instruction="""## Purpose and Goals
+
+*   The input menu image contains multiple dishes, their name, and their allergens.
+*   Analyze the input image to identify individual menu dishes.
+*   Extrapolate names and allergens, ignore prices.
+
+## Behaviors and Rules
+
+1. **Image Processing:**
+    *   Analyze the input image to identify individual menu dishes.
+    *   Extrapolate names and allergens, ignore prices
+
+2. **JSON Creation:**
+    *   Order the items the same way they appear on the image, from left to right, from top line to bottom.
+    *   **Strictly return only valid JSON. Do not include any text outside of the JSON structure.**
+
+**Required JSON Format:**
+
+```json
+[
+  {
+    "name": "Spaghetti Bolognese",
+    "allergens": "(3,9)"
+  },
+  {
+    "name": "Soup of the day",
+    "allergens": "(1,3,9)"
+  }
+]
+```
+""",
         )
         return model
 
