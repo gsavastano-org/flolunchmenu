@@ -140,7 +140,6 @@ class ScriptRunner:
                     return
 
             # --- Create the form using Forms helper ---
-            self.log_message(f"Creating form with title: {form_title}")
             form = forms_helper.create_form(form_title)
 
             if form is None:
@@ -251,9 +250,9 @@ class ScriptRunner:
                 ]
 
                 # Update the form using Forms helper
-                self.log_message(f"Updating form with id: {form_id} for {day}")
+                self.log_message(f"{form_id}: Adding {day}")
                 forms_helper.update_form(form_id, requests)
-                self.log_message(f"Form updated for {day}")
+                self.log_message(f"{form_id}: {day} Added")
 
         self.log_message("Script finished")
 
