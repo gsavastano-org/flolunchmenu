@@ -11,7 +11,6 @@ class Config:
         self.GOOGLE_DRIVE_PROJECT_FOLDER_ID = os.getenv("GOOGLE_DRIVE_PROJECT_FOLDER_ID")
         self.GOOGLE_DRIVE_INPUT_FOLDER_NAME = os.getenv("GOOGLE_DRIVE_INPUT_FOLDER_NAME", "new_menus")
         self.GOOGLE_PROJECT_UUID = os.getenv("GOOGLE_PROJECT_UUID", "your-project-id")
-        self.GOOGLE_SPREADSHEET_NAME = os.getenv("GOOGLE_SPREADSHEET_NAME", "Weekly_Meals_Order_Responses")
         self.GOOGLE_OAUTH2_FILE = os.getenv("GOOGLE_OAUTH2_FILE")
         self.GOOGLE_PROJECT_SCOPES = json.loads(os.getenv('GOOGLE_PROJECT_SCOPES'))
         self.YOUR_EMAIL = os.getenv("YOUR_EMAIL")
