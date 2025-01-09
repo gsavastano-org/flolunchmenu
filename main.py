@@ -31,10 +31,14 @@ class ScriptRunner:
 
         MENU_DATA = {}
         DAY_IMAGE_PATHS = {}
+        NEW_IMAGE_IDS = {}
+        OLD_IMAGE_IDS = {}
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         for i, day in enumerate(days):
             MENU_DATA[day] = []
             DAY_IMAGE_PATHS[day] = None
+            NEW_IMAGE_IDS[day] = None
+            OLD_IMAGE_IDS[day] = None
 
         # --- Set the form file name and title ---
         form_file_name = f'Weekly_Meals_Order_Week_{week_number}'
@@ -57,7 +61,6 @@ class ScriptRunner:
             form = forms_helper.get_form(form_id)
             # form_id is actually a file_id, so we need to get form_id from form
             form_id = form.get('formId')
-            self.log_message(f"Retrieved form with formId: {form_id}")
             self.log_message(f"Form already exists: {drive_helper.get_form_webViewLink(form_id)}")
             self.log_message("Script finished - Form already exists")
             return  # Stop the script if the form already exists
@@ -72,24 +75,19 @@ class ScriptRunner:
                 if not image_id:
                     images_exist_in_week_folder = False
                     break
+                else:
+                    OLD_IMAGE_IDS[days[i - 1]] = image_id
 
-            if images_exist_in_week_folder:
+            if images_exist_in_week_folder and len(OLD_IMAGE_IDS) == 5:
                 self.log_message("Images found in the week's folder. Processing with Gemini.")
                 for i, day in enumerate(days):
-                    image_file_name = f'{i + 1}.jpeg'
-                    image_id = drive_helper.get_file_id(image_file_name, week_folder_id)
-                    if image_id:
-                        # Pass the file ID to Gemini helper
-                        menu_data_str = gemini_helper.get_menu_json_from_drive_id(image_id)
-                        if menu_data_str:
-                            try:
-                                MENU_DATA[day] = json.loads(menu_data_str)
-                                DAY_IMAGE_PATHS[day] = image_file_name  # Use filename as it's already in the target
-                            except json.JSONDecodeError as e:
-                                self.log_message(f"Error decoding JSON for {day}: {e}")
-                    else:
-                        self.log_message(f"Image {image_file_name} not found in week folder for {day}.")
-
+                    menu_data_str = gemini_helper.get_menu_json_from_drive_id(OLD_IMAGE_IDS[day])
+                    if menu_data_str:
+                        try:
+                            MENU_DATA[day] = json.loads(menu_data_str)
+                            DAY_IMAGE_PATHS[day] = image_file_name  # Use filename as it's already in the target
+                        except json.JSONDecodeError as e:
+                            self.log_message(f"Error decoding JSON for {day}: {e}")
             else:
                 # Check the input folder for images
                 input_folder_id = drive_helper.get_folder_id(self.config.GOOGLE_DRIVE_INPUT_FOLDER_NAME,
@@ -105,34 +103,33 @@ class ScriptRunner:
                             self.log_message(f"Image {image_file_name} not found in the input folder.")
                             images_found_in_input = False
                             break
+                        else:
+                            NEW_IMAGE_IDS[days[i - 1]] = image_id
 
-                    if images_found_in_input:
+                    if images_found_in_input and len(NEW_IMAGE_IDS) == 5:
                         self.log_message(
                             "All images found in the input folder. Moving to week folder and processing.")
                         for i, day in enumerate(days):
-                            file_name = f'{i + 1}.jpeg'
-                            source_file_id = drive_helper.get_file_id(file_name, input_folder_id)
-                            if source_file_id:
-                                # Move the file
-                                moved_file_id = drive_helper.move_file(source_file_id, week_folder_id,
-                                                                       input_folder_id,
-                                                                       new_name=file_name)
-                                if moved_file_id:
-                                    self.log_message(f"Moved {file_name} to week folder as {file_name}")
-                                    # Add a delay after moving the file
-                                    await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
-                                    # Process the moved image
-                                    menu_data_str = gemini_helper.get_menu_json_from_drive_id(moved_file_id)
-                                    if menu_data_str:
-                                        try:
-                                            MENU_DATA[day] = json.loads(menu_data_str)
-                                            DAY_IMAGE_PATHS[day] = file_name
-                                        except json.JSONDecodeError as e:
-                                            self.log_message(f"Error decoding JSON for {day}: {e}")
-                                else:
-                                    self.log_message(f"Failed to move {file_name} to the week folder.")
+                            file_name = f'{i + 1}.jpeg'               
+                            moved_file_id = drive_helper.move_file(NEW_IMAGE_IDS[day], week_folder_id,
+                                                                    input_folder_id,
+                                                                    new_name=file_name)
+                            # override the image id with the new id
+                            NEW_IMAGE_IDS[day] = moved_file_id
+                            if moved_file_id:
+                                self.log_message(f"Moved {file_name} to week folder as {file_name}")
+                                # Add a delay after moving the file
+                                await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
+                                # Process the moved image
+                                menu_data_str = gemini_helper.get_menu_json_from_drive_id(moved_file_id)
+                                if menu_data_str:
+                                    try:
+                                        MENU_DATA[day] = json.loads(menu_data_str)
+                                        DAY_IMAGE_PATHS[day] = file_name
+                                    except json.JSONDecodeError as e:
+                                        self.log_message(f"Error decoding JSON for {day}: {e}")
                             else:
-                                self.log_message(f"Could not find {file_name} in the input folder.")
+                                self.log_message(f"Failed to move {file_name} to the week folder.")
 
                     else:
                         self.log_message("Not all images found in the input folder. Exiting.")
@@ -151,8 +148,8 @@ class ScriptRunner:
                 return
 
             form_id = form['formId']
-            self.log_message(f"Form created with formId: {form_id}")
-            self.log_message(f"Form created: {form.get('responderUri')}")
+            self.log_message(f"Empty Form Created: formId {form_id}")
+            self.log_message(f"Empty Form URL: {form.get('responderUri')}")
 
             # --- Move the created form to the week folder using Drive helper---
             drive_helper.move_file(form_id, week_folder_id, drive_helper.get_root_folder_id(), form_file_name)
@@ -183,14 +180,15 @@ class ScriptRunner:
                 transferOwnership=True
             ).execute()
 
-            # --- Attache images and create form questions for each day---
+            # --- Attach images and create form questions for each day ---
+            # --- Reverse the menu data to start with Friday so it's the last day in the form ---
             for day, menu in reversed(MENU_DATA.items()):
                 if not menu or not DAY_IMAGE_PATHS[day]:
                     self.log_message(f"Skipping {day} due to missing menu or image data.")
                     continue  # Skip to the next day if menu or image is missing
 
                 image_file_name = DAY_IMAGE_PATHS[day]
-                image_id = drive_helper.get_file_id(image_file_name, week_folder_id)
+                image_id = NEW_IMAGE_IDS[day]
                 if not image_id:
                     self.log_message(
                         f"Image {image_file_name} not found in week folder for {day}. Skipping questions.")
