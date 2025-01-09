@@ -2,9 +2,9 @@ import asyncio
 import json
 from datetime import datetime
 import tkinter as tk
-from tkinter import scrolledtext
+from tkinter import scrolledtext, filedialog
 from threading import Thread
-from app.core.utils import configure_logging, logging
+from app.core.utils import configure_logging, logging, is_valid_jpeg
 from app.core.config import Config
 from app.core.auth import GoogleAuth
 from app.services.gdrive import GoogleDriveHelper
@@ -14,11 +14,22 @@ from app.services.gemini import GoogleGeminiHelper
 configure_logging()
 
 class ScriptRunner:
-    def __init__(self, config, output_widget):
+    def __init__(self, config, output_widget, selected_image_paths):
         self.config = config
         self.output_widget = output_widget
+        self.selected_image_paths = selected_image_paths
 
     async def run_script(self):
+        # --- Validation ---
+        if not all(self.selected_image_paths.values()):
+            self.log_message("Error: Please select an image for each day.")
+            return
+
+        for day, path in self.selected_image_paths.items():
+            if not is_valid_jpeg(path):
+                self.log_message(f"Error: Invalid file type for {day}. Please select a .jpeg image.")
+                return
+
         auth = GoogleAuth(self.config)
         credentials = auth.get_credentials()
 
@@ -30,15 +41,11 @@ class ScriptRunner:
         week_number = datetime.now().isocalendar()[1]
 
         MENU_DATA = {}
-        DAY_IMAGE_PATHS = {}
         NEW_IMAGE_IDS = {}
-        OLD_IMAGE_IDS = {}
         days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         for i, day in enumerate(days):
             MENU_DATA[day] = []
-            DAY_IMAGE_PATHS[day] = None
             NEW_IMAGE_IDS[day] = None
-            OLD_IMAGE_IDS[day] = None
 
         # --- Set the form file name and title ---
         form_file_name = f'Weekly_Meals_Order_Week_{week_number}'
@@ -67,77 +74,26 @@ class ScriptRunner:
         else:
             self.log_message("Form does not exist, proceeding with creation.")
 
-            # Check if images already exist in the week's folder
-            images_exist_in_week_folder = True
-            for i in range(1, 6):
-                image_file_name = f'{i}.jpeg'
-                image_id = drive_helper.get_file_id(image_file_name, week_folder_id)
-                if not image_id:
-                    images_exist_in_week_folder = False
-                    break
-                else:
-                    OLD_IMAGE_IDS[days[i - 1]] = image_id
-
-            if images_exist_in_week_folder and len(OLD_IMAGE_IDS) == 5:
-                self.log_message("Images found in the week's folder. Processing with Gemini.")
-                for i, day in enumerate(days):
-                    menu_data_str = gemini_helper.get_menu_json_from_drive_id(OLD_IMAGE_IDS[day])
+            # Upload the images to the week folder
+            for i, day in enumerate(days):
+                file_name = f'{i + 1}.jpeg'
+                # Pass the file path to upload_file instead of the file object
+                uploaded_file_id = drive_helper.upload_file(self.selected_image_paths[day], file_name, week_folder_id, 'image/jpeg')
+                # override the image id with the new id
+                NEW_IMAGE_IDS[day] = uploaded_file_id
+                if uploaded_file_id:
+                    self.log_message(f"Uploaded {file_name} to week folder as {file_name}")
+                    # Add a delay after moving the file
+                    await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
+                    # Process the moved image
+                    menu_data_str = gemini_helper.get_menu_json_from_drive_id(uploaded_file_id)
                     if menu_data_str:
                         try:
                             MENU_DATA[day] = json.loads(menu_data_str)
-                            DAY_IMAGE_PATHS[day] = image_file_name  # Use filename as it's already in the target
                         except json.JSONDecodeError as e:
                             self.log_message(f"Error decoding JSON for {day}: {e}")
-            else:
-                # Check the input folder for images
-                input_folder_id = drive_helper.get_folder_id(self.config.GOOGLE_DRIVE_INPUT_FOLDER_NAME,
-                                                             self.config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
-                if input_folder_id:
-                    self.log_message(
-                        f"Checking input folder for images: {self.config.GOOGLE_DRIVE_INPUT_FOLDER_NAME}")
-                    images_found_in_input = True
-                    for i in range(1, 6):
-                        image_file_name = f'{i}.jpeg'
-                        image_id = drive_helper.get_file_id(image_file_name, input_folder_id)
-                        if not image_id:
-                            self.log_message(f"Image {image_file_name} not found in the input folder.")
-                            images_found_in_input = False
-                            break
-                        else:
-                            NEW_IMAGE_IDS[days[i - 1]] = image_id
-
-                    if images_found_in_input and len(NEW_IMAGE_IDS) == 5:
-                        self.log_message(
-                            "All images found in the input folder. Moving to week folder and processing.")
-                        for i, day in enumerate(days):
-                            file_name = f'{i + 1}.jpeg'               
-                            moved_file_id = drive_helper.move_file(NEW_IMAGE_IDS[day], week_folder_id,
-                                                                    input_folder_id,
-                                                                    new_name=file_name)
-                            # override the image id with the new id
-                            NEW_IMAGE_IDS[day] = moved_file_id
-                            if moved_file_id:
-                                self.log_message(f"Moved {file_name} to week folder as {file_name}")
-                                # Add a delay after moving the file
-                                await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
-                                # Process the moved image
-                                menu_data_str = gemini_helper.get_menu_json_from_drive_id(moved_file_id)
-                                if menu_data_str:
-                                    try:
-                                        MENU_DATA[day] = json.loads(menu_data_str)
-                                        DAY_IMAGE_PATHS[day] = file_name
-                                    except json.JSONDecodeError as e:
-                                        self.log_message(f"Error decoding JSON for {day}: {e}")
-                            else:
-                                self.log_message(f"Failed to move {file_name} to the week folder.")
-
-                    else:
-                        self.log_message("Not all images found in the input folder. Exiting.")
-                        return
                 else:
-                    self.log_message(
-                        f"Input folder '{self.config.GOOGLE_DRIVE_INPUT_FOLDER_NAME}' not found. Exiting.")
-                    return
+                    self.log_message(f"Failed to upload {file_name} to the week folder.")
 
             # --- Create the form using Forms helper ---
             form = forms_helper.create_form(form_title)
@@ -182,15 +138,14 @@ class ScriptRunner:
             # --- Attach images and create form questions for each day ---
             # --- Reverse the menu data to start with Friday so it's the last day in the form ---
             for day, menu in reversed(MENU_DATA.items()):
-                if not menu or not DAY_IMAGE_PATHS[day]:
+                if not menu or not NEW_IMAGE_IDS[day]:
                     self.log_message(f"Skipping {day} due to missing menu or image data.")
                     continue  # Skip to the next day if menu or image is missing
 
-                image_file_name = DAY_IMAGE_PATHS[day]
                 image_id = NEW_IMAGE_IDS[day]
                 if not image_id:
                     self.log_message(
-                        f"Image {image_file_name} not found in week folder for {day}. Skipping questions.")
+                        f"Image not found in week folder for {day}. Skipping questions.")
                     continue
 
                 # Get the image URL
@@ -268,10 +223,34 @@ class Application(tk.Frame):
         self.master = master
         self.master.title("Script Runner")
         self.pack()
+        self.selected_image_paths = {
+            'Monday': None,
+            'Tuesday': None,
+            'Wednesday': None,
+            'Thursday': None,
+            'Friday': None
+        }
         self.create_widgets()
         self.script_runner = None
 
     def create_widgets(self):
+        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
+        for day in days:
+            frame = tk.Frame(self)
+            frame.pack(pady=5)
+
+            upload_button = tk.Button(frame, text=f"Upload {day}", command=lambda d=day: self.upload_file(d))
+            upload_button.pack(side=tk.LEFT)
+
+            file_label = tk.Label(frame, text="No file selected")
+            file_label.pack(side=tk.LEFT, padx=10)
+
+            self.selected_image_paths[day] = {
+                'button': upload_button,
+                'label': file_label,
+                'path': None
+            }
+
         self.start_button = tk.Button(self, text="Start", command=self.run_script_in_thread)
         self.start_button.pack(pady=20)
 
@@ -279,14 +258,28 @@ class Application(tk.Frame):
         self.output_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
 
         # Create Exit button but don't pack it yet
-        self.exit_button = tk.Button(self, text="Exit", command=self.master.destroy, state=tk.DISABLED) 
+        self.exit_button = tk.Button(self, text="Exit", command=self.master.destroy, state=tk.DISABLED)
+
+    def upload_file(self, day):
+        filepath = filedialog.askopenfilename(
+            filetypes=[("JPEG files", "*.jpeg"), ("All files", "*.*")]
+        )
+        if filepath:
+            self.selected_image_paths[day]['path'] = filepath
+            self.selected_image_paths[day]['label'].config(text=filepath.split("/")[-1])  # Update label with file name
 
     def run_script_in_thread(self):
+        if not all(data['path'] for data in self.selected_image_paths.values()):
+            self.output_text.insert(tk.END, "Error: Please select an image for each day.\n")
+            self.output_text.see(tk.END)
+            return
+
         self.start_button.config(state=tk.DISABLED)
         self.output_text.delete('1.0', tk.END)  # Clear output
 
         config = Config()
-        self.script_runner = ScriptRunner(config, self.output_text)
+        self.script_runner = ScriptRunner(config, self.output_text,
+                                          {day: data['path'] for day, data in self.selected_image_paths.items()})
 
         # Run the script in a separate thread
         thread = Thread(target=self.run_async_script)
@@ -298,7 +291,7 @@ class Application(tk.Frame):
 
     def enable_buttons(self):
         self.start_button.config(state=tk.NORMAL)
-        self.exit_button.config(state=tk.NORMAL) # Enable the exit button
+        self.exit_button.config(state=tk.NORMAL)  # Enable the exit button
         self.exit_button.pack(pady=10)  # Now pack the Exit button
 
 def main():

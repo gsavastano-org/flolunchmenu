@@ -1,4 +1,5 @@
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaFileUpload
 from app.core.utils import handle_error, configure_logging, logging
 
 configure_logging()
@@ -77,7 +78,7 @@ class GoogleDriveHelper:
             # Retrieve the existing parents to remove
             file = self.drive_service.files().get(fileId=file_id, fields='parents, name').execute()
             previous_parents = ",".join(file.get('parents'))
-            
+
             # File's new metadata.
             file_metadata = {}
             if new_name:
@@ -120,4 +121,19 @@ class GoogleDriveHelper:
             return root_folder_id
         except Exception as e:
             handle_error(f"Error getting root folder ID", e)
+            return None
+
+    def upload_file(self, file, file_name, parent_folder_id, mime_type):
+        """Uploads a file to Google Drive."""
+        logging.info(f"Uploading file: {file_name} to folder: {parent_folder_id}")
+        try:
+            file_metadata = {'name': file_name, 'parents': [parent_folder_id]}
+            media = MediaFileUpload(file, mimetype=mime_type, resumable=True)
+            file = self.drive_service.files().create(body=file_metadata,
+                                                    media_body=media,
+                                                    fields='id').execute()
+            logging.info(f"File uploaded with id: {file.get('id')}")
+            return file.get('id')
+        except Exception as e:
+            handle_error(f"Error uploading file '{file_name}'", e)
             return None
