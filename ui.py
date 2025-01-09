@@ -25,9 +25,9 @@ class ApplicationUI(tk.Frame):
     def create_widgets(self):
         # --- Style ---
         style = ttk.Style()
-        style.configure('TButton', padding=5, font=('Arial', 10))
-        style.configure('TLabel', font=('Arial', 10))
-        style.configure('TLabelframe.Label', font=('Arial', 12, 'bold'))
+        style.configure('TButton', padding=5, font=('Arial', 12))
+        style.configure('TLabel', font=('Arial', 12))
+        style.configure('TLabelframe.Label', font=('Arial', 14, 'bold'))
 
         # --- Upload Frame ---
         upload_frame = ttk.LabelFrame(self, text="Select Menu Images", padding=10)
