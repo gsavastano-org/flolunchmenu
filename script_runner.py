@@ -1,11 +1,8 @@
+# --- Core Logic Layer: script_runner.py ---
 import asyncio
 import json
 from datetime import datetime
-import tkinter as tk
-from tkinter import scrolledtext, filedialog
-from threading import Thread
 from app.core.utils import configure_logging, logging, is_valid_jpeg
-from app.core.config import Config
 from app.core.auth import GoogleAuth
 from app.services.gdrive import GoogleDriveHelper
 from app.services.gforms import GoogleFormsHelper
@@ -14,21 +11,21 @@ from app.services.gemini import GoogleGeminiHelper
 configure_logging()
 
 class ScriptRunner:
-    def __init__(self, config, output_widget, selected_image_paths):
+    def __init__(self, config):
         self.config = config
-        self.output_widget = output_widget
-        self.selected_image_paths = selected_image_paths
 
-    async def run_script(self):
+    async def run_script(self, selected_image_paths, ui_handler):
         # --- Validation ---
-        if not all(self.selected_image_paths.values()):
-            self.log_message("Error: Please select an image for each day.")
+        if not all(selected_image_paths.values()):
+            ui_handler.log_message("Error: Please select an image for each day.", error=True)
             return
 
-        for day, path in self.selected_image_paths.items():
+        for day, path in selected_image_paths.items():
             if not is_valid_jpeg(path):
-                self.log_message(f"Error: Invalid file type for {day}. Please select a .jpeg image.")
+                ui_handler.log_message(f"Error: Invalid file type for {day}. Please select a .jpeg image.", error=True)
                 return
+
+        ui_handler.update_progress(0)  # Reset progress
 
         auth = GoogleAuth(self.config)
         credentials = auth.get_credentials()
@@ -55,34 +52,38 @@ class ScriptRunner:
         week_folder_name = str(week_number)
         week_folder_id = drive_helper.get_folder_id(week_folder_name, self.config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
         if not week_folder_id:
-            self.log_message(f"Creating week folder: {week_folder_name}")
+            ui_handler.log_message(f"Creating week folder: {week_folder_name}")
             week_folder_id = drive_helper.create_folder(week_folder_name, self.config.GOOGLE_DRIVE_PROJECT_FOLDER_ID)
-            self.log_message(f"Week folder created with id: {week_folder_id}")
+            ui_handler.log_message(f"Week folder created with id: {week_folder_id}")
+
+        # Update progress
+        ui_handler.update_progress(10)
 
         # --- Check if form already exists using Drive helper ---
         form_id = drive_helper.get_file_id(form_file_name, week_folder_id)
 
         if form_id:
             # Form already exists, retrieve form using Forms helper
-            self.log_message(f"Form already exists with id: {form_id}")
+            ui_handler.log_message(f"Form already exists with id: {form_id}")
             form = forms_helper.get_form(form_id)
             # form_id is actually a file_id, so we need to get form_id from form
             form_id = form.get('formId')
-            self.log_message(f"Form already exists: {drive_helper.get_form_webViewLink(form_id)}")
-            self.log_message("Script finished - Form already exists")
+            ui_handler.log_message(f"Form already exists: {drive_helper.get_form_webViewLink(form_id)}")
+            ui_handler.log_message("Script finished - Form already exists")
+            ui_handler.enable_buttons()
             return  # Stop the script if the form already exists
         else:
-            self.log_message("Form does not exist, proceeding with creation.")
+            ui_handler.log_message("Form does not exist, proceeding with creation.")
 
             # Upload the images to the week folder
             for i, day in enumerate(days):
                 file_name = f'{i + 1}.jpeg'
                 # Pass the file path to upload_file instead of the file object
-                uploaded_file_id = drive_helper.upload_file(self.selected_image_paths[day], file_name, week_folder_id, 'image/jpeg')
+                uploaded_file_id = drive_helper.upload_file(selected_image_paths[day], file_name, week_folder_id, 'image/jpeg')
                 # override the image id with the new id
                 NEW_IMAGE_IDS[day] = uploaded_file_id
                 if uploaded_file_id:
-                    self.log_message(f"Uploaded {file_name} to week folder as {file_name}")
+                    ui_handler.log_message(f"Uploaded {file_name} to week folder as {file_name}")
                     # Add a delay after moving the file
                     await asyncio.sleep(5)  # Adjust delay as needed (e.g., 5 seconds)
                     # Process the moved image
@@ -91,20 +92,22 @@ class ScriptRunner:
                         try:
                             MENU_DATA[day] = json.loads(menu_data_str)
                         except json.JSONDecodeError as e:
-                            self.log_message(f"Error decoding JSON for {day}: {e}")
+                            ui_handler.log_message(f"Error decoding JSON for {day}: {e}", error=True)
                 else:
-                    self.log_message(f"Failed to upload {file_name} to the week folder.")
+                    ui_handler.log_message(f"Failed to upload {file_name} to the week folder.", error=True)
+                ui_handler.update_progress(10 + int((i + 1) * (90/5)))  # Update progress after each upload
 
             # --- Create the form using Forms helper ---
             form = forms_helper.create_form(form_title)
 
             if form is None:
-                self.log_message("Failed to create form. Exiting.")
+                ui_handler.log_message("Failed to create form. Exiting.", error=True)
+                ui_handler.enable_buttons()
                 return
 
             form_id = form['formId']
-            self.log_message(f"Empty Form Created: formId {form_id}")
-            self.log_message(f"Empty Form URL: {form.get('responderUri')}")
+            ui_handler.log_message(f"Empty Form Created: formId {form_id}")
+            ui_handler.log_message(f"Empty Form URL: {form.get('responderUri')}")
 
             # --- Move the created form to the week folder using Drive helper---
             drive_helper.move_file(form_id, week_folder_id, drive_helper.get_root_folder_id(), form_file_name)
@@ -139,13 +142,13 @@ class ScriptRunner:
             # --- Reverse the menu data to start with Friday so it's the last day in the form ---
             for day, menu in reversed(MENU_DATA.items()):
                 if not menu or not NEW_IMAGE_IDS[day]:
-                    self.log_message(f"Skipping {day} due to missing menu or image data.")
+                    ui_handler.log_message(f"Skipping {day} due to missing menu or image data.", error=True)
                     continue  # Skip to the next day if menu or image is missing
 
                 image_id = NEW_IMAGE_IDS[day]
                 if not image_id:
-                    self.log_message(
-                        f"Image not found in week folder for {day}. Skipping questions.")
+                    ui_handler.log_message(
+                        f"Image not found in week folder for {day}. Skipping questions.", error=True)
                     continue
 
                 # Get the image URL
@@ -205,99 +208,10 @@ class ScriptRunner:
                 ]
 
                 # Update the form using Forms helper
-                self.log_message(f"{form_id}: Adding {day}")
+                ui_handler.log_message(f"{form_id}: Adding {day}")
                 forms_helper.update_form(form_id, requests)
-                self.log_message(f"{form_id}: {day} Added")
+                ui_handler.log_message(f"{form_id}: {day} Added")
 
-        self.log_message("Script finished")
-
-    def log_message(self, message):
-        """Logs a message to the output widget and console."""
-        logging.info(message)
-        self.output_widget.insert(tk.END, message + "\n")
-        self.output_widget.see(tk.END)  # Scroll to the end
-
-class Application(tk.Frame):
-    def __init__(self, master=None):
-        super().__init__(master)
-        self.master = master
-        self.master.title("Script Runner")
-        self.pack()
-        self.selected_image_paths = {
-            'Monday': None,
-            'Tuesday': None,
-            'Wednesday': None,
-            'Thursday': None,
-            'Friday': None
-        }
-        self.create_widgets()
-        self.script_runner = None
-
-    def create_widgets(self):
-        days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
-        for day in days:
-            frame = tk.Frame(self)
-            frame.pack(pady=5)
-
-            upload_button = tk.Button(frame, text=f"Upload {day}", command=lambda d=day: self.upload_file(d))
-            upload_button.pack(side=tk.LEFT)
-
-            file_label = tk.Label(frame, text="No file selected")
-            file_label.pack(side=tk.LEFT, padx=10)
-
-            self.selected_image_paths[day] = {
-                'button': upload_button,
-                'label': file_label,
-                'path': None
-            }
-
-        self.start_button = tk.Button(self, text="Start", command=self.run_script_in_thread)
-        self.start_button.pack(pady=20)
-
-        self.output_text = scrolledtext.ScrolledText(self, wrap=tk.WORD)
-        self.output_text.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
-
-        # Create Exit button but don't pack it yet
-        self.exit_button = tk.Button(self, text="Exit", command=self.master.destroy, state=tk.DISABLED)
-
-    def upload_file(self, day):
-        filepath = filedialog.askopenfilename(
-            filetypes=[("JPEG files", "*.jpeg"), ("All files", "*.*")]
-        )
-        if filepath:
-            self.selected_image_paths[day]['path'] = filepath
-            self.selected_image_paths[day]['label'].config(text=filepath.split("/")[-1])  # Update label with file name
-
-    def run_script_in_thread(self):
-        if not all(data['path'] for data in self.selected_image_paths.values()):
-            self.output_text.insert(tk.END, "Error: Please select an image for each day.\n")
-            self.output_text.see(tk.END)
-            return
-
-        self.start_button.config(state=tk.DISABLED)
-        self.output_text.delete('1.0', tk.END)  # Clear output
-
-        config = Config()
-        self.script_runner = ScriptRunner(config, self.output_text,
-                                          {day: data['path'] for day, data in self.selected_image_paths.items()})
-
-        # Run the script in a separate thread
-        thread = Thread(target=self.run_async_script)
-        thread.start()
-
-    def run_async_script(self):
-        asyncio.run(self.script_runner.run_script())
-        self.master.after(0, self.enable_buttons)  # Enable buttons after script completion
-
-    def enable_buttons(self):
-        self.start_button.config(state=tk.NORMAL)
-        self.exit_button.config(state=tk.NORMAL)  # Enable the exit button
-        self.exit_button.pack(pady=10)  # Now pack the Exit button
-
-def main():
-    root = tk.Tk()
-    app = Application(master=root)
-    app.mainloop()
-
-if __name__ == "__main__":
-    main()
+        ui_handler.update_progress(100)  # Update progress to 100%
+        ui_handler.log_message("Script finished")
+        ui_handler.enable_buttons()
