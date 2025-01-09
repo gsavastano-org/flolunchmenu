@@ -14,13 +14,12 @@ class GoogleFormsHelper:
 
     def create_form(self, title):
         """Creates a new Google Form with the given title."""
-        logging.info(f"Creating form with title: {title}")
         try:
             form = self.service.forms().create(
                 body={'info': {'title': title}}
             ).execute()
             form_id = form.get('formId')
-            logging.info(f"Form created with id: {form_id}")
+            logging.info(f"{form_id}: Form created")
             return form
         except Exception as e:
             handle_error(f"Error creating form with title '{title}'", e)
@@ -28,10 +27,8 @@ class GoogleFormsHelper:
 
     def get_form(self, form_id):
         """Retrieves a Google Form by its ID."""
-        logging.info(f"Getting form with id: {form_id}")
         try:
             form = self.service.forms().get(formId=form_id).execute()
-            logging.info(f"Form retrieved with id: {form_id}")
             return form
         except Exception as e:
             handle_error(f"Error getting form with ID {form_id}", e)
@@ -39,33 +36,12 @@ class GoogleFormsHelper:
 
     def update_form(self, form_id, requests):
         """Updates a Google Form with the given requests."""
-        logging.info(f"Updating form with id: {form_id}")
         try:
             form = self.service.forms().batchUpdate(
                 formId=form_id, body={'requests': requests}
             ).execute()
-            logging.info(f"Form updated with id: {form_id}")
+            logging.info(f"{form_id}: Form updated")
             return form
         except Exception as e:
             handle_error(f"Error updating form with ID {form_id}", e)
-            return None
-
-    def set_response_destination(self, form_id, spreadsheet_id):
-        """Sets the response destination of the form to a specific sheet in a spreadsheet."""
-        logging.info(
-            f"Setting response destination for form {form_id} to spreadsheet {spreadsheet_id}"
-        )
-        try:
-            request = {
-                "destination": {
-                    "spreadsheetId": spreadsheet_id
-                }
-            }
-            # Use forms.responses.watch instead of forms.batchUpdate
-            self.service.forms().responses().watch(formId=form_id, body=request).execute()
-            logging.info(f"Response destination set for form {form_id}")
-        except Exception as e:
-            handle_error(
-                f"Error setting response destination for form {form_id}", e
-            )
             return None

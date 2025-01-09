@@ -14,9 +14,3 @@ class Config:
         self.GOOGLE_OAUTH2_FILE = os.getenv("GOOGLE_OAUTH2_FILE")
         self.GOOGLE_PROJECT_SCOPES = json.loads(os.getenv('GOOGLE_PROJECT_SCOPES'))
         self.YOUR_EMAIL = os.getenv("YOUR_EMAIL")
-
-    def get_org_config(self, org_id):
-        """
-        Placeholder for organization-specific configuration.
-        """
-        return {}

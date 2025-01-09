@@ -14,7 +14,6 @@ class GoogleDriveHelper:
 
     def get_folder_id(self, folder_name, parent_folder_id=None):
         """Retrieves the ID of a folder by its name."""
-        logging.info(f"Getting folder id for: {folder_name}")
         try:
             query = f"name='{folder_name}' and mimeType='application/vnd.google-apps.folder' and trashed=false"
             if parent_folder_id:
@@ -35,7 +34,6 @@ class GoogleDriveHelper:
 
     def create_folder(self, folder_name, parent_folder_id=None):
         """Creates a new folder with the given name."""
-        logging.info(f"Creating folder: {folder_name}")
         try:
             file_metadata = {
                 'name': folder_name,
@@ -54,7 +52,6 @@ class GoogleDriveHelper:
 
     def get_file_id(self, file_name, parent_folder_id=None):
         """Retrieves the ID of a file by its name."""
-        logging.info(f"Getting file id for: {file_name}")
         try:
             query = f"name='{file_name}' and trashed=false"
             if parent_folder_id:
