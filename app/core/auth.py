@@ -1,6 +1,7 @@
 from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from app.core.utils import logging
 import os
 
 class GoogleAuth:
@@ -17,6 +18,7 @@ class GoogleAuth:
 
         if not creds or not creds.valid:
             if creds and creds.expired and creds.refresh_token:
+                logging.info("Refreshing Google API token...")
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(

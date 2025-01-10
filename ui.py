@@ -1,10 +1,11 @@
 import tkinter as tk
-from tkinter import scrolledtext, filedialog, ttk
+from tkinter import Y, scrolledtext, filedialog, ttk
 from threading import Thread
 import asyncio
+from pathlib import Path
 from app.core.config import Config
-from script_runner import ScriptRunner
-from PIL import Image, ImageTk  # Import Pillow (PIL) for image handling
+from script_runner import ScriptRunner, ScriptRunnerError
+from PIL import Image, ImageTk
 
 class ApplicationUI(tk.Frame):
     def __init__(self, master=None, script_runner=None):
@@ -14,20 +15,18 @@ class ApplicationUI(tk.Frame):
         self.pack(padx=20, pady=20)
         self.script_runner = script_runner
         self.selected_image_paths = {
-            'Monday': {'path': None, 'label': None},
-            'Tuesday': {'path': None, 'label': None},
-            'Wednesday': {'path': None, 'label': None},
-            'Thursday': {'path': None, 'label': None},
-            'Friday': {'path': None, 'label': None}
+            day: {'path': None, 'label_var': None, 'label': None}
+            for day in ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday']
         }
         self.progress_var = tk.IntVar(value=0)
-        self.load_logo()  # Load the logo image
+        self.logo_image = None  # Initialize to None
+        self.load_logo()
         self.create_widgets()
 
     def load_logo(self):
         """Loads and resizes the logo image."""
         try:
-            logo_path = "app/assets/logo.png"  # Replace with your logo path
+            logo_path = Path("app/assets/logo.png")
             original_image = Image.open(logo_path)
             width = 150
             height = original_image.height * width // original_image.width
@@ -35,7 +34,6 @@ class ApplicationUI(tk.Frame):
             self.logo_image = ImageTk.PhotoImage(resized_image)
         except Exception as e:
             print(f"Error loading logo: {e}")
-            self.logo_image = None
 
     def create_widgets(self):
         # --- Style ---
@@ -99,30 +97,31 @@ class ApplicationUI(tk.Frame):
             filetypes=[("JPEG files", "*.jpeg"), ("All files", "*.*")]
         )
         if filepath:
-            self.selected_image_paths[day]['path'] = filepath
-            self.selected_image_paths[day]['label_var'].set(filepath.split("/")[-1])
+            image_path = Path(filepath)
+            self.selected_image_paths[day]['path'] = image_path
+            self.selected_image_paths[day]['label_var'].set(image_path.name)
 
     def run_script_in_thread(self):
         if not all(data['path'] for data in self.selected_image_paths.values()):
             self.log_message("Error: Please select an image for each day.", error=True)
             return
 
-        # Disable buttons during script execution
         self.start_button.config(state=tk.DISABLED)
         self.clear_button.config(state=tk.DISABLED)
-
-        self.output_text.delete('1.0', tk.END)  # Clear output
+        self.output_text.delete('1.0', tk.END)
         self.progress_var.set(0)
 
-        # Prepare data for the script runner
         image_paths = {day: data['path'] for day, data in self.selected_image_paths.items()}
 
-        # Run the script in a separate thread
         thread = Thread(target=self._run_async_script, args=(image_paths,))
         thread.start()
 
     def _run_async_script(self, image_paths):
-        asyncio.run(self.script_runner.run_script(image_paths, self))
+        try:
+            asyncio.run(self.script_runner.run_script(image_paths, self))
+        except ScriptRunnerError as e:
+            self.log_message(str(e), error=True)
+            self.enable_buttons()
 
     def log_message(self, message, error=False):
         """Logs a message to the output widget and console."""
@@ -151,6 +150,9 @@ class ApplicationUI(tk.Frame):
 def main():
     root = tk.Tk()
     config = Config()
+    print(config.YOUR_EMAIL)
+    print(config.GEMINI_MODEL_NAME)
+    print(config.GEMINI_PROMPT)
     script_runner = ScriptRunner(config)
     app_ui = ApplicationUI(master=root, script_runner=script_runner)
     root.mainloop()

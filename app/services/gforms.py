@@ -1,7 +1,9 @@
 from googleapiclient.discovery import build
-from app.core.utils import handle_error, configure_logging, logging
+from app.core.utils import handle_error, logging
 
-configure_logging()
+class GoogleFormsHelperError(Exception):
+    """Custom exception for GoogleFormsHelper errors."""
+    pass
 
 class GoogleFormsHelper:
     def __init__(self, credentials):
@@ -23,7 +25,7 @@ class GoogleFormsHelper:
             return form
         except Exception as e:
             handle_error(f"Error creating form with title '{title}'", e)
-            return None
+            raise GoogleFormsHelperError(f"Could not create form: {e}") from e
 
     def get_form(self, form_id):
         """Retrieves a Google Form by its ID."""
@@ -32,7 +34,7 @@ class GoogleFormsHelper:
             return form
         except Exception as e:
             handle_error(f"Error getting form with ID {form_id}", e)
-            return None
+            raise GoogleFormsHelperError(f"Could not get form: {e}") from e
 
     def update_form(self, form_id, requests):
         """Updates a Google Form with the given requests."""
@@ -44,4 +46,4 @@ class GoogleFormsHelper:
             return form
         except Exception as e:
             handle_error(f"Error updating form with ID {form_id}", e)
-            return None
+            raise GoogleFormsHelperError(f"Could not update form: {e}") from e
