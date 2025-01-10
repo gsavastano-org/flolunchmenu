@@ -1,6 +1,7 @@
 import os
 import json
 from dotenv import load_dotenv
+import sys
 
 class ConfigError(Exception):
     """Custom exception for configuration errors."""
@@ -8,6 +9,15 @@ class ConfigError(Exception):
 
 class Config:
     def __init__(self, env_path=".env"):
+        # Check if the app is running as a bundled executable
+        if getattr(sys, 'frozen', False):
+            # If so, use the directory of the executable
+            application_path = sys._MEIPASS
+        else:
+            # Otherwise, use the script's directory
+            application_path = os.path.dirname(__file__)
+
+        env_path = os.path.join(application_path, env_path)
         load_dotenv(dotenv_path=env_path)
 
         self.GEMINI_API_KEY = self._get_env("GEMINI_API_KEY")
@@ -20,14 +30,13 @@ class Config:
         self.GEMINI_PROMPT = None
 
         # Load the prompt from a separate file
+        prompt_path = os.path.join(application_path, "app/assets/prompt.txt")
         try:
-            with open("app/assets/prompt.txt", "r") as prompt_file:
+            with open(prompt_path, "r") as prompt_file:
                 self.GEMINI_PROMPT = prompt_file.read()
         except FileNotFoundError:
             self.GEMINI_PROMPT = None
             raise ConfigError("Error: prompt.txt file not found.")
-
-
 
     def _get_env(self, key, default=None):
         value = os.getenv(key, default)
