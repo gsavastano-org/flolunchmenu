@@ -3,7 +3,10 @@
 .venv/
 venv/
 static/
-service-account-flow-lunch-menu.json
-oauth2-flow-lunch-menu.json
+app/core/credentials.json
 __pycache__/
 token.json
+build/
+dist/
+WeeklyMealOrder.spec
+WeeklyMealOrder.dmg

@@ -1,12 +1,15 @@
 import google.generativeai as genai
-from app.core.utils import handle_error, configure_logging, logging
+from app.core.utils import handle_error, logging
 
-configure_logging()
+class GoogleGeminiHelperError(Exception):
+    """Custom exception for GoogleGeminiHelper errors."""
+    pass
 
 class GoogleGeminiHelper:
-    def __init__(self, api_key, model_name, drive_service):
+    def __init__(self, api_key, model_name, prompt, drive_service):
         self.api_key = api_key
         self.model_name = model_name
+        self.prompt = prompt
         self.model = self._configure_model()
         self.drive_service = drive_service
 
@@ -21,6 +24,10 @@ class GoogleGeminiHelper:
             )
             return None
 
+        if not self.prompt:
+            handle_error("Error: prompt.txt file not found.")
+            return None
+
         generation_config = {
             "temperature": 1,
             "top_p": 0.95,
@@ -32,37 +39,7 @@ class GoogleGeminiHelper:
         model = genai.GenerativeModel(
             model_name=self.model_name,
             generation_config=generation_config,
-            system_instruction="""## Purpose and Goals
-
-*   The input menu image contains multiple dishes, their name, and their allergens.
-*   Analyze the input image to identify individual menu dishes.
-*   Extrapolate names and allergens, ignore prices.
-
-## Behaviors and Rules
-
-1. **Image Processing:**
-    *   Analyze the input image to identify individual menu dishes.
-    *   Extrapolate names and allergens, ignore prices
-
-2. **JSON Creation:**
-    *   Order the items the same way they appear on the image, from left to right, from top line to bottom.
-    *   **Strictly return only valid JSON. Do not include any text outside of the JSON structure.**
-
-**Required JSON Format:**
-
-```json
-[
-  {
-    "name": "Spaghetti Bolognese",
-    "allergens": "(3,9)"
-  },
-  {
-    "name": "Soup of the day",
-    "allergens": "(1,3,9)"
-  }
-]
-```
-""",
+            system_instruction=self.prompt,
         )
         return model
 
@@ -70,20 +47,20 @@ class GoogleGeminiHelper:
         """Loads image data from Google Drive using its file ID."""
         if not self.drive_service:
             handle_error("Drive service not initialized.")
-            return None
+            raise GoogleGeminiHelperError("Drive service not initialized.")
         try:
             request = self.drive_service.files().get_media(fileId=file_id)
             response = request.execute()
             return response
         except Exception as e:
             handle_error(f"Error loading image from Google Drive: {e}")
-            return None
+            raise GoogleGeminiHelperError(f"Could not load image from Drive: {e}") from e
 
     def get_menu_json_from_drive_id(self, file_id):
         """Generates a menu JSON string for the given Google Drive file ID."""
         if self.model is None:
             handle_error("Gemini model not configured.")
-            return None
+            raise GoogleGeminiHelperError("Gemini model not configured.")
 
         image_data = self._load_image_from_drive(file_id)
         if image_data:
@@ -99,13 +76,13 @@ class GoogleGeminiHelper:
 
                 if not response.candidates:
                     handle_error("No candidates returned in the response.")
-                    return None
+                    raise GoogleGeminiHelperError("No candidates returned in the response.")
 
                 return response.candidates[0].content.parts[0].text
 
             except Exception as e:
                 handle_error(f"An error occurred during the message sending: {e}")
-                return None
+                raise GoogleGeminiHelperError(f"Error during message sending: {e}") from e
         else:
             handle_error("Could not load the image from Google Drive.")
-            return None
+            raise GoogleGeminiHelperError("Could not load the image from Google Drive.")
