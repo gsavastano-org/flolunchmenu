@@ -150,9 +150,6 @@ class ApplicationUI(tk.Frame):
 def main():
     root = tk.Tk()
     config = Config()
-    print(config.YOUR_EMAIL)
-    print(config.GEMINI_MODEL_NAME)
-    print(config.GEMINI_PROMPT)
     script_runner = ScriptRunner(config)
     app_ui = ApplicationUI(master=root, script_runner=script_runner)
     root.mainloop()
