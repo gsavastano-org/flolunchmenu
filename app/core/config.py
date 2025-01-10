@@ -31,6 +31,10 @@ class Config:
 
         # Load the prompt from a separate file
         prompt_path = os.path.join(application_path, "app/assets/prompt.txt")
+        
+        # If the GOOGLE_OAUTH2_FILE is not an absolute path, assume it is in the same directory as the app
+        self.GOOGLE_OAUTH2_FILE = os.path.join(application_path, self.GOOGLE_OAUTH2_FILE)
+
         try:
             with open(prompt_path, "r") as prompt_file:
                 self.GEMINI_PROMPT = prompt_file.read()

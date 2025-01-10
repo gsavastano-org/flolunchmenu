@@ -4,8 +4,10 @@ from threading import Thread
 import asyncio
 from pathlib import Path
 from app.core.config import Config
-from script_runner import ScriptRunner, ScriptRunnerError
+from app.script_runner import ScriptRunner, ScriptRunnerError
 from PIL import Image, ImageTk
+import os
+import sys
 
 class ApplicationUI(tk.Frame):
     def __init__(self, master=None, script_runner=None):
@@ -26,7 +28,15 @@ class ApplicationUI(tk.Frame):
     def load_logo(self):
         """Loads and resizes the logo image."""
         try:
-            logo_path = Path("app/assets/logo.png")
+            if getattr(sys, 'frozen', False):
+                # If the application is run as a bundle, the PyInstaller bootloader
+                # extends the sys module by a flag frozen=True and sets the app
+                # path into variable _MEIPASS'.
+                application_path = sys._MEIPASS
+            else:
+                application_path = os.path.dirname(os.path.abspath(__file__))
+
+            logo_path = os.path.join(application_path, "app", "assets", "logo.png")
             original_image = Image.open(logo_path)
             width = 150
             height = original_image.height * width // original_image.width
@@ -152,6 +162,11 @@ def main():
     config = Config()
     script_runner = ScriptRunner(config)
     app_ui = ApplicationUI(master=root, script_runner=script_runner)
+
+    # Redirect stderr to a file
+    error_log_path = os.path.join(os.path.expanduser("~"), "flo_app_error.log")
+    sys.stderr = open(error_log_path, 'w')
+
     root.mainloop()
 
 if __name__ == "__main__":

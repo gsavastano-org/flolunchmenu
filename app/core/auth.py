@@ -12,7 +12,9 @@ class GoogleAuth:
     def authenticate(self):
         """Authenticates the user using OAuth 2.0 and stores credentials."""
         creds = None
-        token_path = 'token.json'  # File to store user tokens
+        # Use a known writable location for token.json (e.g., user's home directory)
+        token_path = os.path.join(os.path.expanduser("~"), "token.json")
+
         if os.path.exists(token_path):
             creds = Credentials.from_authorized_user_file(token_path, self.config.GOOGLE_PROJECT_SCOPES)
 
@@ -22,7 +24,7 @@ class GoogleAuth:
                 creds.refresh(Request())
             else:
                 flow = InstalledAppFlow.from_client_secrets_file(
-                    self.config.GOOGLE_OAUTH2_FILE,  # Your downloaded OAuth credentials
+                    self.config.GOOGLE_OAUTH2_FILE,
                     self.config.GOOGLE_PROJECT_SCOPES
                 )
                 creds = flow.run_local_server(port=0)
