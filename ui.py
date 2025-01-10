@@ -3,7 +3,8 @@ from tkinter import scrolledtext, filedialog, ttk
 from threading import Thread
 import asyncio
 from app.core.config import Config
-from script_runner import ScriptRunner  # Import the logic class
+from script_runner import ScriptRunner
+from PIL import Image, ImageTk  # Import Pillow (PIL) for image handling
 
 class ApplicationUI(tk.Frame):
     def __init__(self, master=None, script_runner=None):
@@ -20,7 +21,21 @@ class ApplicationUI(tk.Frame):
             'Friday': {'path': None, 'label': None}
         }
         self.progress_var = tk.IntVar(value=0)
+        self.load_logo()  # Load the logo image
         self.create_widgets()
+
+    def load_logo(self):
+        """Loads and resizes the logo image."""
+        try:
+            logo_path = "app/assets/logo.png"  # Replace with your logo path
+            original_image = Image.open(logo_path)
+            width = 150
+            height = original_image.height * width // original_image.width
+            resized_image = original_image.resize((width, height), Image.LANCZOS)
+            self.logo_image = ImageTk.PhotoImage(resized_image)
+        except Exception as e:
+            print(f"Error loading logo: {e}")
+            self.logo_image = None
 
     def create_widgets(self):
         # --- Style ---
@@ -28,6 +43,14 @@ class ApplicationUI(tk.Frame):
         style.configure('TButton', padding=5, font=('Arial', 12))
         style.configure('TLabel', font=('Arial', 12))
         style.configure('TLabelframe.Label', font=('Arial', 14, 'bold'))
+
+        # --- Logo Frame ---
+        logo_frame = ttk.Frame(self)
+        logo_frame.grid(row=0, column=1, sticky="nsew", padx=10, pady=10)
+
+        if self.logo_image:
+            logo_label = ttk.Label(logo_frame, image=self.logo_image)
+            logo_label.pack()
 
         # --- Upload Frame ---
         upload_frame = ttk.LabelFrame(self, text="Select Menu Images", padding=10)
@@ -56,7 +79,8 @@ class ApplicationUI(tk.Frame):
         self.clear_button.grid(row=0, column=1, sticky="ew", padx=5)
 
         # --- Progress Bar ---
-        self.progress_bar = ttk.Progressbar(self, variable=self.progress_var, orient="horizontal", length=300, mode="determinate")
+        self.progress_bar = ttk.Progressbar(self, variable=self.progress_var, orient="horizontal", length=300,
+                                            mode="determinate")
         self.progress_bar.grid(row=2, column=0, sticky="ew", padx=10, pady=10)
 
         # --- Output Frame ---
@@ -68,7 +92,7 @@ class ApplicationUI(tk.Frame):
         # --- Exit Button ---
         self.exit_button = ttk.Button(self, text="Exit", command=self.master.destroy)
         self.exit_button.grid(row=4, column=0, sticky="ew", padx=10, pady=10)
-        self.exit_button.config(state=tk.NORMAL) # Always enabled
+        self.exit_button.config(state=tk.NORMAL)  # Always enabled
 
     def upload_file(self, day):
         filepath = filedialog.askopenfilename(
